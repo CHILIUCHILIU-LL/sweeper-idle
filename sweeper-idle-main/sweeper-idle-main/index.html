@@ -1,0 +1,254 @@
+<html>
+    <meta charset="utf-8" />
+<head>
+    <link rel="stylesheet" href="stylesheet.css" />
+    
+    <title>
+        扫雷放置 - SweeperIdle
+    </title>
+</head>
+
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="images"></div>
+
+    <div id="gameControls">
+        <button id="btnPause" class="control-btn">暂停</button>
+        <button id="btnSave" class="control-btn">保存</button>
+        <button id="btnLoad" class="control-btn">读取</button>
+        <button id="btnMusic" class="control-btn">音乐: 关</button>
+    </div>
+
+    <script src="lib/require.js"></script>
+    <script src="Main.js"></script>
+    <script src="start.js"></script>
+
+    <script>
+        var musicPlaying = false;
+        var audioCtx = null;
+        var oscillators = [];
+        var gainNode = null;
+        var musicInterval = null;
+        
+        var btnPause = document.getElementById('btnPause');
+        var btnSave = document.getElementById('btnSave');
+        var btnLoad = document.getElementById('btnLoad');
+        var btnMusic = document.getElementById('btnMusic');
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function createMusicNote(freq, duration, startTime) {
+            if (!audioCtx) return null;
+            
+            var osc = audioCtx.createOscillator();
+            var noteGain = audioCtx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            
+            noteGain.gain.setValueAtTime(0, startTime);
+            noteGain.gain.linearRampToValueAtTime(0.15, startTime + 0.05);
+            noteGain.gain.exponentialRampToValueAtTime(0.01, startTime + duration - 0.1);
+            
+            osc.connect(noteGain);
+            noteGain.connect(gainNode);
+            
+            return osc;
+        }
+
+        function startBackgroundMusic() {
+            if (musicPlaying) return;
+            
+            initAudio();
+            
+            if (!gainNode) {
+                gainNode = audioCtx.createGain();
+                gainNode.gain.value = 0.3;
+                gainNode.connect(audioCtx.destination);
+            }
+            
+            musicPlaying = true;
+            btnMusic.textContent = '音乐: 开';
+            
+            var melody = [262, 294, 330, 349, 392, 440, 494, 523];
+            var noteIndex = 0;
+            
+            function playNextNote() {
+                if (!musicPlaying) return;
+                
+                var now = audioCtx.currentTime;
+                var freq = melody[noteIndex % melody.length];
+                var osc = createMusicNote(freq, 0.4, now);
+                
+                if (osc) {
+                    osc.start(now);
+                    osc.stop(now + 0.5);
+                    oscillators.push(osc);
+                }
+                
+                noteIndex++;
+                
+                if (oscillators.length > 20) {
+                    oscillators = oscillators.slice(-10);
+                }
+            }
+            
+            playNextNote();
+            musicInterval = setInterval(playNextNote, 500);
+        }
+
+        function stopBackgroundMusic() {
+            if (!musicPlaying) return;
+            
+            musicPlaying = false;
+            btnMusic.textContent = '音乐: 关';
+            
+            if (musicInterval) {
+                clearInterval(musicInterval);
+                musicInterval = null;
+            }
+            
+            oscillators.forEach(function(osc) {
+                try { osc.stop(); } catch(e) {}
+            });
+            oscillators = [];
+        }
+
+        function showMessage(msg) {
+            var msgDiv = document.createElement('div');
+            msgDiv.className = 'game-message';
+            msgDiv.textContent = msg;
+            document.body.appendChild(msgDiv);
+            
+            setTimeout(function() {
+                msgDiv.style.opacity = '0';
+                setTimeout(function() {
+                    if (msgDiv.parentNode) {
+                        document.body.removeChild(msgDiv);
+                    }
+                }, 300);
+            }, 2000);
+        }
+
+        function setupControls() {
+            console.log('Setting up controls...');
+            
+            btnPause.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Pause button clicked');
+                try {
+                    if (window.sweeperGame) {
+                        var isPaused = window.sweeperGame.togglePause();
+                        btnPause.textContent = isPaused ? '继续' : '暂停';
+                        showMessage(isPaused ? '游戏已暂停' : '游戏已继续');
+                    } else {
+                        showMessage('游戏尚未初始化');
+                    }
+                } catch(err) {
+                    console.error('Pause error:', err);
+                    showMessage('操作失败: ' + err.message);
+                }
+            });
+
+            btnSave.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Save button clicked');
+                try {
+                    if (window.sweeperGame) {
+                        window.sweeperGame.saveGame();
+                        showMessage('游戏已保存到本地存储！');
+                    } else {
+                        showMessage('游戏尚未初始化');
+                    }
+                } catch(err) {
+                    console.error('Save error:', err);
+                    showMessage('保存失败: ' + err.message);
+                }
+            });
+
+            btnLoad.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Load button clicked');
+                try {
+                    if (window.sweeperGame) {
+                        if (window.sweeperGame.hasSaveData()) {
+                            window.sweeperGame.loadGame();
+                            if (window.sweeperGame.getPaused && window.sweeperGame.getPaused()) {
+                                window.sweeperGame.togglePause();
+                                btnPause.textContent = '暂停';
+                            }
+                            showMessage('游戏进度已读取！');
+                        } else {
+                            showMessage('没有找到存档数据');
+                        }
+                    } else {
+                        showMessage('游戏尚未初始化');
+                    }
+                } catch(err) {
+                    console.error('Load error:', err);
+                    showMessage('读取失败: ' + err.message);
+                }
+            });
+
+            btnMusic.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Music button clicked');
+                try {
+                    if (musicPlaying) {
+                        stopBackgroundMusic();
+                    } else {
+                        startBackgroundMusic();
+                    }
+                } catch(err) {
+                    console.error('Music error:', err);
+                    showMessage('音乐控制失败: ' + err.message);
+                }
+            });
+            
+            console.log('Controls setup complete');
+        }
+
+        function checkGameReady() {
+            console.log('Checking game ready... window.sweeperGame:', !!window.sweeperGame);
+            if (window.sweeperGame) {
+                setupControls();
+            } else {
+                setTimeout(checkGameReady, 100);
+            }
+        }
+
+        console.log('Page loaded, starting game check...');
+        checkGameReady();
+    </script>
+    <!--客服 开始-->
+<script src="//g8hh.com/static/js/jquery.min.js"></script>
+<link rel="stylesheet" href="//g8hh.com/static/css/kf.css" type="text/css" media="screen" charset="utf-8">
+<script src="//g8hh.com/static/js/kf.js"></script>
+<!-- 客服 结束 -->
+<!--站长统计-->
+<div style="display: none">
+    <script>
+    var _hmt = _hmt || [];
+    (function() {
+      var hm = document.createElement("script");
+      hm.src = "https://hm.baidu.com/hm.js?6581389daf4dd6fe7dbb4d20fdcb52a6";
+      var s = document.getElementsByTagName("script")[0]; 
+      s.parentNode.insertBefore(hm, s);
+    })();
+    </script>
+        </div>
+</body>
+
+</html>
