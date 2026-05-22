@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "module": "AMD",
+    "target": "es5",
+    "sourceMap": true,
+    "outFile": "Main.js",
+    "rootDir": "./scripts",
+    "strict": false,
+    "ignoreDeprecations": "6.0",
+    "lib": [
+      "dom",
+      "es2015",
+      "es5",
+      "es6"
+    ]
+  }
+}
